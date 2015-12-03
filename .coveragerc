@@ -1,0 +1,8 @@
+[run]
+source=pyxs
+branch=True
+[report]
+omit =
+    *example*
+    # ignore _version.py and versioneer.py
+    *version*
