@@ -37,8 +37,8 @@ RQ_module = Extension('_RQconv',
                       )
 
 cmds = versioneer.get_cmdclass()
-cmds['install'] = BuildExtFirst # Build first the extension and after that builds the entire package
-cmds['build_ext'] = BuildExtOnce # Avoid build the extension twice
+cmds['install'] = BuildExtFirst  # Build first the extension and after that builds the entire package
+cmds['build_ext'] = BuildExtOnce  # Avoid build the extension twice
 
 setup(
     name='pyxs',
