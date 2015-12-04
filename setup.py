@@ -52,7 +52,7 @@ setup(
     package_data={},
     py_modules=['pyxs'],
     ext_modules=[RQ_module],
-    install_requires=['nose', 'numpy', 'scipy', 'matplotlib', 'Pillow', ''],
+    install_requires=['nose', 'numpy', 'scipy', 'matplotlib', 'Pillow', 'fabio'],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Programming Language :: Python :: 3.4",
