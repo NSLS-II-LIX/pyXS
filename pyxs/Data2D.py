@@ -1,11 +1,13 @@
 import pyxs.ext.RQconv as RQconv
+import scipy.misc
 import numpy as np
-from PIL import Image
 import matplotlib.pyplot as plt
 import matplotlib.colors as mc
 from matplotlib.colors import LogNorm
 from scipy import interpolate
 from functools import reduce
+
+import fabio
 
 """ this module handle data I/O and display
     the heavy-duty calculations are done by a C module, RQconv:
@@ -38,20 +40,20 @@ class Data2d:
         # conversion to mode "I" apparent also works for tiff32 (PILATUS)
         # NOTE: the index of the 2d array is data[row,col]
         self.exp = None
-        self.im = Image.open(filename).convert("I")
+        self.im = fabio.open(filename).data
         if flip:
-            self.im = self.im.transpose(Image.ROTATE_90).transpose(Image.FLIP_LEFT_RIGHT)
+            self.im = np.fliplr(np.rot90(self.im))
         # convert into an array
         # copy() seems to be necessary for later alteration of the 2D data
         self.data = np.asarray(self.im).copy()
-        (self.height, self.width) = np.shape(self.data)
+        self.height, self.width = self.data.shape
         self.q_data_available = False
         self.qdata = None
         # self.exp = RQconv.ExpPara()
 
     def set_exp_para(self, exp):
         if exp.flip:
-            self.im = self.im.transpose(Image.ROTATE_90).transpose(Image.FLIP_LEFT_RIGHT)
+            self.im = np.fliplr(np.rot90(self.im))
             self.data = np.asarray(self.im).copy()
             (self.height, self.width) = np.shape(self.data)
         self.exp = exp
@@ -167,17 +169,21 @@ class Data2d:
         """
         # get a larger box
         t = int(np.sqrt(w * w + h * h) + 1)
-        imroi = self.im.crop((np.int(cx - t + 1), np.int(cy - t + 1), np.int(cx + t), np.int(cy + t)))
+        #imroi = self.im.crop((np.int(cx - t + 1), np.int(cy - t + 1), np.int(cx + t), np.int(cy + t)))
+
+        imroi = self.im[np.int(cx - t + 1):np.int(cy - t + 1), np.int(cx + t):np.int(cy + t)]
         # rotate 
-        imroi = imroi.rotate(-phi, Image.BILINEAR)
+        imroi = scipy.misc.imrotate(imroi, -phi, 'bilinear')
         # get the roi
-        imroi = imroi.crop((np.int(t - w + 1), np.int(t - h + 1), np.int(t + w), np.int(t + h)))
-        dd = np.asarray(imroi.convert("I"))
+        #imroi = imroi.crop((np.int(t - w + 1), np.int(t - h + 1), np.int(t + w), np.int(t + h)))
+        imroi = imroi[np.int(t - w + 1):np.int(t - h + 1), np.int(t + w):np.int(t + h)]
+
+
         if show:
             plt.figure()
             ax = plt.gca()
-            ax.imshow(dd, interpolation='nearest')
-        return dd.sum()
+            ax.imshow(imroi, interpolation='nearest')
+        return imroi.sum()
 
     def profile_xyphi(self, xy_grid, w, h, bkg=0):
         """ the shape of xy_grid should be (3,N)

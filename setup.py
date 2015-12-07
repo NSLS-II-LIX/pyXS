@@ -37,8 +37,8 @@ RQ_module = Extension('_RQconv',
                       )
 
 cmds = versioneer.get_cmdclass()
-cmds['install'] = BuildExtFirst # Build first the extension and after that builds the entire package
-cmds['build_ext'] = BuildExtOnce # Avoid build the extension twice
+cmds['install'] = BuildExtFirst  # Build first the extension and after that builds the entire package
+cmds['build_ext'] = BuildExtOnce  # Avoid build the extension twice
 
 setup(
     name='pyxs',
@@ -52,7 +52,7 @@ setup(
     package_data={},
     py_modules=['pyxs'],
     ext_modules=[RQ_module],
-    install_requires=['nose', 'numpy', 'scipy', 'matplotlib', 'Pillow', ''],
+    install_requires=['nose', 'numpy', 'scipy', 'matplotlib', 'Pillow', 'fabio'],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Programming Language :: Python :: 3.4",
