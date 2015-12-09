@@ -1,9 +1,7 @@
-#!/sw/bin/python
-
-from .exp_setup import *
+from exp_setup import *
 import matplotlib as mpl
 import matplotlib.gridspec as gridspec
-from pyxs.plot import Axes2DPlot
+from pyxs.plot.Axes2DPlot import Axes2dplot
 
 mpl.rc('lines', linewidth=1)
 

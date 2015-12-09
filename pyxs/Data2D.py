@@ -245,7 +245,7 @@ class Data2d:
         """calls the C-code in RQconv
         """
         # print q,phi
-        ret = RQconv.qphi2xy(self.data, self.exp, q, phi)
+        ret = RQconv.qphi2xy(self.data.astype(np.int32), self.exp, q, phi)
         return ret.x, ret.y
 
     def xy2qrqz(self, x, y):
