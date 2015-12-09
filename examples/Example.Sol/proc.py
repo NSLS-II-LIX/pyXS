@@ -15,13 +15,12 @@ if len(sys.argv) < 3:
 else:
     # set plot_data=True to see curves from the individual files
     # a label can be given to the averaged curve
-    d1 = proc_SWAXS(sys.argv[1].split(),
+    d1 = slnXS.process(sys.argv[1].split(),
                     sys.argv[2].split(),
-                    sdark, wdark,
+                    detectors,
                     qmax=0.19, qmin=0.11, reft=-1,
                     conc=float(sys.argv[3]),
                     save1d=True,
-                    waxsflat=wflat,
                     fix_scale=-51.5
                     )
     d1.save(sys.argv[4])

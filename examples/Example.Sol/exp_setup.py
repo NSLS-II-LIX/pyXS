@@ -1,15 +1,13 @@
 import os
-import numpy as np
 
 try:
     import cPickle as pk
 except ImportError:
     import pickle as pk
 
-from pyxs.Data2D import *
+from pyxs.DetectorConfig import DetectorConfig
 from pyxs.ext.RQconv import *
 from pyxs.slnXS import *
-import matplotlib.pyplot as plt
 
 es = ExpPara()
 es.wavelength = 0.874
@@ -117,3 +115,11 @@ else:
     pkl_file = open(FLAT_FILE_W, 'wb')
     pk.dump(wflat, pkl_file)
     pkl_file.close()
+
+detectors = []
+
+detectorSAXS = DetectorConfig(extension = "_SAXS", dark = sdark, flat = None, dezinger = False)
+detectorWAXS = DetectorConfig(extension = "_WAXS", dark = wdark, flat = wflat, dezinger = True)
+
+detectors.append(detectorSAXS)
+detectors.append(detectorWAXS)

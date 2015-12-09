@@ -1,8 +1,9 @@
-from pyxs.Mask import Mask
-from pyxs.Data2D import *
-import matplotlib.pyplot as plt
-import numpy as np
 import copy
+import numpy as np
+import matplotlib.pyplot as plt
+from pyxs.Data2D import Data2d
+from pyxs.Mask import Mask
+from pyxs.utils import common_name
 
 # this is the ratio between protein average denstiy and water density
 # it is assumed to be a constant but in reality depends on the specific portein
@@ -12,17 +13,17 @@ PROTEIN_WATER_DENSITY_RATIO = 1.35
 # setup ExpPara and masks for SAXS and WAXS as global variables??
 
 
-## revised Apr. 2011
-## Each Data1d corresponds to one single scattering pattern
-## Dark current is subtracted when loading the data from the 2D pattern 
-## The intensity is normalized based on 
-##     (1) beam intensity through the beam stop, as in prvious version
-##  or (2) WAXS intensity (water scattering)
-##  or (3) an externally dtermined value 
-## The intensity can be further normalized a reference trans value, so
-##   that different sets can be compared.
-## Data1d sets (must share the same qgrid) can be merged: e.g. SAXS and WAS
-## Background subtraction and flat field correction are also supported
+# revised Apr. 2011
+# Each Data1d corresponds to one single scattering pattern
+# Dark current is subtracted when loading the data from the 2D pattern
+# The intensity is normalized based on
+#     (1) beam intensity through the beam stop, as in prvious version
+#  or (2) WAXS intensity (water scattering)
+#  or (3) an externally dtermined value
+# The intensity can be further normalized a reference trans value, so
+#   that different sets can be compared.
+# Data1d sets (must share the same qgrid) can be merged: e.g. SAXS and WAS
+# Background subtraction and flat field correction are also supported
 
 TRANS_EXTERNAL = 0
 TRANS_FROM_BEAM_CENTER = 1
@@ -39,6 +40,7 @@ WAXS_THRESH = 300
 # this is the scaling factor for indivudual curves that belong to the same sample
 # they are offset for clarity in the plots
 VOFFSET = 1.5
+
 
 
 class Data1d:
@@ -105,7 +107,7 @@ class Data1d:
         self.err = qidi[2, :] / np.sqrt(n)
         # self.save(images[0]+".ave")
 
-        # dark current subtraction will be done using the 2D images 
+        # dark current subtraction will be done using the 2D images
         self.d2data = d2.data.copy()
         if plot_data:
             plt.figure()
@@ -119,8 +121,8 @@ class Data1d:
         del d2
 
     def load_from_2D(self, imageFn, ddark, dflat=None, save_ave=False, dz=0):
-        """ 
-        imageFn: file name for the 2D pattern  
+        """
+        imageFn: file name for the 2D pattern
         ep: ExpPara
         ddark: wiil use the qgrid from ddark
         """
@@ -150,7 +152,7 @@ class Data1d:
         # either do this correction separately, or set cor=1 when calling conv_to_Iq()
         # d2.cor_IAdep_2D(ddark.mask)
         # editted Aug. 17, 2011, do polarization correction only
-        # all other corrections included in flat field 
+        # all other corrections included in flat field
         # d2.cor_IAdep_2D(ddark.mask,corCode=1)
 
         # flat field data = fluorescence from NaBr, assume to be emitted isotropically
@@ -184,7 +186,7 @@ class Data1d:
             if len(self.qgrid[idx]) < 5:
                 # not enough data points at the water peak
                 # use the last 10 data points instead
-                """ these lines usually cause trouble when WAXS_THRESH is set low  
+                """ these lines usually cause trouble when WAXS_THRESH is set low
                 idx = self.data>WAXS_THRESH
                 if len(self.data[idx])<1:
                     print "no suitable WAXS data found to calculate trans. max(WAXS)=%f" % np.max(self.data)
@@ -243,7 +245,7 @@ class Data1d:
         """
         dset is a collection of Data1d
         ax is the Axes to plot the data in
-        TODO: should calculate something like the cross-correlation between sets 
+        TODO: should calculate something like the cross-correlation between sets
         to evaluate the consistency between them
         """
         print("averaging data with %s:" % self.label, end=' ')
@@ -309,7 +311,7 @@ class Data1d:
         else:
             sc = self.trans / dbak.trans
 
-        # need to include raw data 
+        # need to include raw data
 
         if plot_data:
             if ax == None:
@@ -404,7 +406,7 @@ class Data1d:
             # For a given experimental configuration, the intensity normlization
             # factor between the SAXS and WAXS should be well-defined. This factor
             # can be determined using scattering data with siginificant intensity
-            # in the overlapping q-range and applied to all data collected in the 
+            # in the overlapping q-range and applied to all data collected in the
             # same configuration.
             sc = fix_scale
         else:
@@ -423,7 +425,7 @@ class Data1d:
 
         if len(self.qgrid[idx]) > 0:
             self.data[idx] = (self.data[idx] + d1.data[idx]) / 2
-            # this won't work well if the merging data are mis-matched before bkg subtraction 
+            # this won't work well if the merging data are mis-matched before bkg subtraction
             # but match well after bkg subtraction
             # self.err[idx] = (self.err[idx]+d1.err[idx])/2+np.fabs(self.data[idx]-d1.data[idx])
             self.err[idx] = (self.err[idx] + d1.err[idx]) / 2
@@ -530,7 +532,7 @@ def avg_SWAXS(fns, sdark, sext="_SAXS", wdark=None, wext="_WAXS", qmax=-1, qmin=
     sdark,wdark: dark current data for SAXS/WAXS, also contain qgrid, exp_para and mask 
     """
 
-    if not wdark == None:
+    if wdark is not None:
         if not sdark.qgrid.shape == wdark.qgrid.shape:
             print("SAXS and WAXS data should have the same qgrid.")
             exit()
@@ -546,7 +548,7 @@ def avg_SWAXS(fns, sdark, sext="_SAXS", wdark=None, wext="_WAXS", qmax=-1, qmin=
         #    s0.flat_cor(saxsflat)
         if save1d:
             s0.save(fn + sext + ".ave")
-        if not wdark == None:
+        if wdark is not None:
             w0 = Data1d()
             w0.load_from_2D(fn + wext, wdark, dflat=waxsflat, dz=1)
             # if not (waxsflat==None):
@@ -563,6 +565,52 @@ def avg_SWAXS(fns, sdark, sext="_SAXS", wdark=None, wext="_WAXS", qmax=-1, qmin=
         ss[0].save(ss[0].label + ".ddd")
 
     return ss[0]
+
+
+def average(files, detectors, qmax=-1, qmin=-1, reft=-1, plot_data=False, save1d=False, fix_scale=-1, ax=None):
+    """
+    fns: filenames, without the _SAXS/_WAXS surfix
+    sdark,wdark: dark current data for SAXS/WAXS, also contain qgrid, exp_para and mask
+    """
+
+    if len(detectors) > 1:
+        for i in range(1, len(detectors)):
+            if not np.array_equal(detectors[i-1].dark.qgrid, detectors[i].dark.qgrid):
+                raise RuntimeError("Detectors data should have the same qgrid.")
+                exit()
+
+    ss = []
+    for fn in files:
+        s0 = None
+        for d in detectors:
+            d0 = Data1d()
+            d0.load_from_2D(fn + d.extension, d.dark, dflat=d.flat, dz=d.dezinger)
+            if save1d:
+                d0.save(fn + d.extension + ".ave")
+
+            if s0 is None:
+                s0 = d0
+            else:
+                s0.merge(d0, qmax, qmin, fix_scale)
+        s0.set_trans(ref_trans=reft)
+        ss.append(s0)
+
+    if len(ss) > 0:
+        ss[0].avg(ss[1:], plot_data, ax=ax)
+    if save1d:
+        ss[0].save(ss[0].label + ".ddd")
+
+    return ss[0]
+
+
+def process(sfns, bfns, detectors, qmax=-1, qmin=-1, reft=-1, save1d=False, conc=0., plot_data=True, fix_scale=-1):
+    ds = average(sfns, detectors, qmax, qmin, reft, plot_data, fix_scale)
+    db = average(bfns, detectors, qmax, qmin, reft, plot_data, fix_scale)
+
+    vfrac = 0.001 * conc / PROTEIN_WATER_DENSITY_RATIO
+
+    ds.bkg_cor(db, 1.0 - vfrac, plot_data=True)
+    return ds
 
 
 def proc_SWAXS(sfns, bfns, sdark, wdark=None, qmax=-1, qmin=-1, reft=-1, save1d=False, conc=0., plot_data=True,
@@ -597,22 +645,6 @@ def analyze(d1, qstart, qend, fix_qe, qcutoff, dmax):
     plt.subplots_adjust(bottom=0.15, wspace=0.25)
 
 
-def common_name(s1, s2):
-    l = len(s1)
-    if len(s2) < l:
-        l = len(s2)
-
-    s = ""
-    for i in range(l):
-        if s1[i] == s2[i]:
-            s += s1[i]
-        else:
-            break
-    if len(s) < 1:
-        s = s1.copy()
-    return s.rstrip("-_ ")
-
-
 def mod_qgrid(qgrid):
     """
     RQconv.conv_to_Iq() will try to figure out the boundary between bins in the I(q) histogram
@@ -626,19 +658,19 @@ def mod_qgrid(qgrid):
     be a transition point
     """
     # mgrid = copy.copy(qgrid)
-    binw = np.ones(len(qgrid))
+    # binw = np.ones(len(qgrid))
     dq = qgrid[1] - qgrid[0]
-    bw = dq
+    # bw = dq
     for i in np.arange(len(qgrid) - 2) + 1:
         dq1 = qgrid[i + 1] - qgrid[i]
         if dq != dq1:  # modify qgrid[i]
             qgrid[i] += (dq + dq1) / 4 - dq / 2
             dq = dq1
 
-    for i in np.arange(len(qgrid) - 1):
-        bw = (qgrid[i + 1] - qgrid[i]) * 2 - bw
-        binw[i] = bw
-    binw[-1] = bw
+    # for i in np.arange(len(qgrid) - 1):
+    #     bw = (qgrid[i + 1] - qgrid[i]) * 2 - bw
+    #     binw[i] = bw
+    # binw[-1] = bw
 
-    # print qgrid,binw
+    # print(qgrid,binw)
     return qgrid
