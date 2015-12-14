@@ -42,7 +42,6 @@ WAXS_THRESH = 300
 VOFFSET = 1.5
 
 
-
 class Data1d:
     def __init__(self):
         self.comments = ""
@@ -525,48 +524,6 @@ class Data1d:
         ff.close()
 
 
-def avg_SWAXS(fns, sdark, sext="_SAXS", wdark=None, wext="_WAXS", qmax=-1, qmin=-1, reft=-1,
-              plot_data=False, save1d=False, saxsflat=None, waxsflat=None, fix_scale=-1, ax=None):
-    """
-    fns: filenames, without the _SAXS/_WAXS surfix
-    sdark,wdark: dark current data for SAXS/WAXS, also contain qgrid, exp_para and mask 
-    """
-
-    if wdark is not None:
-        if not sdark.qgrid.shape == wdark.qgrid.shape:
-            print("SAXS and WAXS data should have the same qgrid.")
-            exit()
-        if not (sdark.qgrid == wdark.qgrid).all():
-            print("SAXS and WAXS data should have the same qgrid.")
-            exit()
-
-    ss = []
-    for fn in fns:
-        s0 = Data1d()
-        s0.load_from_2D(fn + sext, sdark, dflat=saxsflat, dz=0)
-        # if not (saxsflat==None):
-        #    s0.flat_cor(saxsflat)
-        if save1d:
-            s0.save(fn + sext + ".ave")
-        if wdark is not None:
-            w0 = Data1d()
-            w0.load_from_2D(fn + wext, wdark, dflat=waxsflat, dz=1)
-            # if not (waxsflat==None):
-            #    w0.flat_cor(waxsflat)
-            if save1d:
-                w0.save(fn + wext + ".ave")
-            s0.merge(w0, qmax, qmin, fix_scale)
-        s0.set_trans(ref_trans=reft)
-        ss.append(s0)
-
-    if len(ss) > 0:
-        ss[0].avg(ss[1:], plot_data, ax=ax)
-    if save1d:
-        ss[0].save(ss[0].label + ".ddd")
-
-    return ss[0]
-
-
 def average(files, detectors, qmax=-1, qmin=-1, reft=-1, plot_data=False, save1d=False, fix_scale=-1, ax=None):
     """
     fns: filenames, without the _SAXS/_WAXS surfix
@@ -609,26 +566,6 @@ def process(sfns, bfns, detectors, qmax=-1, qmin=-1, reft=-1, save1d=False, conc
 
     vfrac = 0.001 * conc / PROTEIN_WATER_DENSITY_RATIO
 
-    ds.bkg_cor(db, 1.0 - vfrac, plot_data=True)
-    return ds
-
-
-def proc_SWAXS(sfns, bfns, sdark, wdark=None, qmax=-1, qmin=-1, reft=-1, save1d=False, conc=0., plot_data=True,
-               saxsflat=None, waxsflat=None, fix_scale=-1):
-    # if qmax or qmin is not given, the WAXS data will be simply stacked to the end of the SAXS data
-    ds = avg_SWAXS(sfns, sdark, "_SAXS", wdark, "_WAXS", qmax, qmin, reft, plot_data=True, save1d=save1d,
-                   saxsflat=saxsflat, waxsflat=waxsflat, fix_scale=fix_scale)
-    db = avg_SWAXS(bfns, sdark, "_SAXS", wdark, "_WAXS", qmax, qmin, reft, plot_data=True, save1d=save1d,
-                   saxsflat=saxsflat, waxsflat=waxsflat, fix_scale=fix_scale)
-    vfrac = 0.001 * conc / PROTEIN_WATER_DENSITY_RATIO
-    ds.bkg_cor(db, 1.0 - vfrac, plot_data=True)
-    return ds
-
-
-def proc_SAXS(sfns, bfns, sdark, reft=-1, save1d=False, conc=0., saxsflat=None):
-    ds = avg_SWAXS(sfns, sdark, reft=reft, plot_data=True, save1d=save1d, saxsflat=saxsflat)
-    db = avg_SWAXS(bfns, sdark, reft=reft, plot_data=True, save1d=save1d, saxsflat=saxsflat)
-    vfrac = 0.001 * conc / PROTEIN_WATER_DENSITY_RATIO
     ds.bkg_cor(db, 1.0 - vfrac, plot_data=True)
     return ds
 
