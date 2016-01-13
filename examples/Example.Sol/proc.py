@@ -1,6 +1,4 @@
 from exp_setup import *
-# import matplotlib.pyplot as plt
-# plt.ion()
 import sys
 import pyxs.slnXS as slnXS
 
@@ -21,7 +19,7 @@ else:
                     qmax=0.19, qmin=0.11, reft=-1,
                     conc=float(sys.argv[3]),
                     save1d=True,
-                    fix_scale=-51.5
+                    fix_scale=51.9#-51.5
                     )
     d1.save(sys.argv[4])
 

@@ -118,8 +118,8 @@ else:
 
 detectors = []
 
-detectorSAXS = DetectorConfig(extension = "_SAXS", dark = sdark, flat = None, dezinger = False)
-detectorWAXS = DetectorConfig(extension = "_WAXS", dark = wdark, flat = wflat, dezinger = True)
+detectorSAXS = DetectorConfig(extension="_SAXS", dark=sdark, flat=None, dezinger=False)
+detectorWAXS = DetectorConfig(extension="_WAXS", dark=wdark, flat=wflat, dezinger=True)
 
 detectors.append(detectorSAXS)
 detectors.append(detectorWAXS)
