@@ -54,7 +54,6 @@ class Mask:
             # rectangle
             # r  x  y  w  h  rotation
             margin = (np.asarray(mask_map.size) / 2).astype(np.int)
-            print("Margin: ", margin)
             tmap = tmap.resize(np.asarray(mask_map.size) + 2 * margin)
             draw = ImageDraw.Draw(tmap)
             (x, y, w, h, rot) = para

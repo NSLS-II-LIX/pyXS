@@ -5,22 +5,22 @@
 #endif
 
 typedef struct {
-  float wavelength;         
-  float  bm_ctr_x;          
-  float  bm_ctr_y;          
-  // ratioDw: sample_to_detector distance / detector_physical_width
-  float ratioDw;            
-  float det_orient;         
-  float det_tilt;           
-  float det_phi;            
-  int grazing_incident;                   // True/False   
-  float incident_angle;     
-  float sample_normal;      
-  float beam_tX,beam_tY;
-  int flip;                               // True/False, True for PSI WAXS 
-  float det_rot[3][3],det_rot_T[3][3];    // the rotation matrix 
-  float qr0,qz0,dq;
-  int nr,nz;
+    float wavelength;
+    float  bm_ctr_x;
+    float  bm_ctr_y;
+    // ratioDw: sample_to_detector distance / detector_physical_width
+    float ratioDw;
+    float det_orient;
+    float det_tilt;
+    float det_phi;
+    int grazing_incident;                   // True/False
+    float incident_angle;
+    float sample_normal;
+    float beam_tX, beam_tY;
+    int flip;                               // True/False, True for PSI WAXS
+    float det_rot[3][3], det_rot_T[3][3];    // the rotation matrix
+    float qr0, qz0, dq;
+    int nr, nz;
 } ExpPara;
 
 typedef struct {
@@ -61,9 +61,7 @@ float get_value(int *data, int nrow, int ncol, float fx, float fy);
 void pre_conv_Iqrqz(int *data, int nrow, int ncol, ExpPara *exp);
 
 //
-void conv_to_Iqrqz(int *data, int row, int col, 
-		   int *dataout, int drow, int dcol, 
-		   ExpPara *exp);
+void conv_to_Iqrqz(int *data, int row, int col, int *dataout, int drow, int dcol, ExpPara *exp);
 
 // merge 2 images together, using the "dezinger" algorithm
 void merge(int *data1, int row1, int col1, int *data2, int row2, int col2);
