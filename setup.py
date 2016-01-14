@@ -48,7 +48,7 @@ setup(
     author='Lin Yang, Hugo Slepicka',
     license="",
     url="https://github.com/hhslepicka/travistest",
-    packages=['pyxs', 'pyxs.ext'],
+    packages=['pyxs', 'pyxs.plot', 'pyxs.ext'],
     package_data={},
     py_modules=['pyxs'],
     ext_modules=[RQ_module],

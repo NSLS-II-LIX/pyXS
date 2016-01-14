@@ -1,8 +1,14 @@
-from pyxs.Mask import Mask
-from pyxs.Data2D import *
-import matplotlib.pyplot as plt
-import numpy as np
 import copy
+import numpy as np
+import collections
+import matplotlib.pyplot as plt
+from pyxs.Data2D import Data2d
+from pyxs.Mask import Mask
+from pyxs.utils import common_name
+
+import os
+import itertools as it
+import multiprocessing as mp
 
 # this is the ratio between protein average denstiy and water density
 # it is assumed to be a constant but in reality depends on the specific portein
@@ -12,17 +18,17 @@ PROTEIN_WATER_DENSITY_RATIO = 1.35
 # setup ExpPara and masks for SAXS and WAXS as global variables??
 
 
-## revised Apr. 2011
-## Each Data1d corresponds to one single scattering pattern
-## Dark current is subtracted when loading the data from the 2D pattern 
-## The intensity is normalized based on 
-##     (1) beam intensity through the beam stop, as in prvious version
-##  or (2) WAXS intensity (water scattering)
-##  or (3) an externally dtermined value 
-## The intensity can be further normalized a reference trans value, so
-##   that different sets can be compared.
-## Data1d sets (must share the same qgrid) can be merged: e.g. SAXS and WAS
-## Background subtraction and flat field correction are also supported
+# revised Apr. 2011
+# Each Data1d corresponds to one single scattering pattern
+# Dark current is subtracted when loading the data from the 2D pattern
+# The intensity is normalized based on
+#     (1) beam intensity through the beam stop, as in prvious version
+#  or (2) WAXS intensity (water scattering)
+#  or (3) an externally dtermined value
+# The intensity can be further normalized a reference trans value, so
+#   that different sets can be compared.
+# Data1d sets (must share the same qgrid) can be merged: e.g. SAXS and WAS
+# Background subtraction and flat field correction are also supported
 
 TRANS_EXTERNAL = 0
 TRANS_FROM_BEAM_CENTER = 1
@@ -95,7 +101,8 @@ class Data1d:
             if save_ave:
                 self.save(fn + ".ave")
             if plot_data:
-                plt.errorbar(self.qgrid, self.data, self.err, label=fn)
+                idx = (self.data > 0)
+                plt.errorbar(self.qgrid[idx], self.data[idx], self.err[idx], label=fn)
         self.comments += "\n"
 
         d2.scale(1. / n)
@@ -105,7 +112,7 @@ class Data1d:
         self.err = qidi[2, :] / np.sqrt(n)
         # self.save(images[0]+".ave")
 
-        # dark current subtraction will be done using the 2D images 
+        # dark current subtraction will be done using the 2D images
         self.d2data = d2.data.copy()
         if plot_data:
             plt.figure()
@@ -119,8 +126,8 @@ class Data1d:
         del d2
 
     def load_from_2D(self, imageFn, ddark, dflat=None, save_ave=False, dz=0):
-        """ 
-        imageFn: file name for the 2D pattern  
+        """
+        imageFn: file name for the 2D pattern
         ep: ExpPara
         ddark: wiil use the qgrid from ddark
         """
@@ -150,7 +157,7 @@ class Data1d:
         # either do this correction separately, or set cor=1 when calling conv_to_Iq()
         # d2.cor_IAdep_2D(ddark.mask)
         # editted Aug. 17, 2011, do polarization correction only
-        # all other corrections included in flat field 
+        # all other corrections included in flat field
         # d2.cor_IAdep_2D(ddark.mask,corCode=1)
 
         # flat field data = fluorescence from NaBr, assume to be emitted isotropically
@@ -184,7 +191,7 @@ class Data1d:
             if len(self.qgrid[idx]) < 5:
                 # not enough data points at the water peak
                 # use the last 10 data points instead
-                """ these lines usually cause trouble when WAXS_THRESH is set low  
+                """ these lines usually cause trouble when WAXS_THRESH is set low
                 idx = self.data>WAXS_THRESH
                 if len(self.data[idx])<1:
                     print "no suitable WAXS data found to calculate trans. max(WAXS)=%f" % np.max(self.data)
@@ -226,30 +233,30 @@ class Data1d:
             self.trans = ref_trans
             print("normalized to %f" % ref_trans)
 
-        # this is no longer in use
-        #    def flat_cor(self, dflat):
-        #        """
-        #        make sure dflat and self have the same qgrid
-        #        flat correction should be done after the data is loaded from the 2D image
-        #        """
-        #        print "flat field correction for %s ..." % self.label
-        #        if not (dflat.qgrid==self.qgrid).all():
-        #            print "flat field correction failed: qgrid mismatch"
-        #            exit()
-        #        idx = dflat.data>0
-        #        self.data[idx] /= (dflat.data[idx]/np.average(dflat.data[idx]))
+            # this is no longer in use
+            #    def flat_cor(self, dflat):
+            #        """
+            #        make sure dflat and self have the same qgrid
+            #        flat correction should be done after the data is loaded from the 2D image
+            #        """
+            #        print "flat field correction for %s ..." % self.label
+            #        if not (dflat.qgrid==self.qgrid).all():
+            #            print "flat field correction failed: qgrid mismatch"
+            #            exit()
+            #        idx = dflat.data>0
+            #        self.data[idx] /= (dflat.data[idx]/np.average(dflat.data[idx]))
 
     def avg(self, dsets, plot_data=False, ax=None):
         """
         dset is a collection of Data1d
         ax is the Axes to plot the data in
-        TODO: should calculate something like the cross-correlation between sets 
+        TODO: should calculate something like the cross-correlation between sets
         to evaluate the consistency between them
         """
         print("averaging data with %s:" % self.label, end=' ')
         n = 1
         if plot_data:
-            if ax == None:
+            if ax is None:
                 plt.figure()
                 plt.subplots_adjust(bottom=0.15)
                 ax = plt.gca()
@@ -257,7 +264,8 @@ class Data1d:
             ax.set_ylabel("$I$", fontsize='x-large')
             ax.set_xscale('log')
             ax.set_yscale('log')
-            ax.errorbar(self.qgrid, self.data, self.err, label=self.label)
+            idx = (self.data > 0)
+            ax.errorbar(self.qgrid[idx], self.data[idx], self.err[idx], label=self.label)
             if hasattr(self, 'raw_data1'):
                 ax.plot(self.q_overlap, self.raw_data1, "v")
                 ax.plot(self.q_overlap, self.raw_data2, "^")
@@ -272,7 +280,8 @@ class Data1d:
             self.err += d1.err
             self.comments += "# averaged with \n%s" % d1.comments.replace("# ", "## ")
             if plot_data:
-                ax.errorbar(d1.qgrid, d1.data * VOFFSET ** n, d1.err * VOFFSET ** n, label=d1.label)
+                idx = (d1.data > 0)  # Remove Zeros on plot
+                ax.errorbar(d1.qgrid[idx], d1.data[idx] * VOFFSET ** n, d1.err[idx] * VOFFSET ** n, label=d1.label)
                 if hasattr(d1, 'raw_data1'):
                     ax.plot(d1.q_overlap, d1.raw_data1 * VOFFSET ** n, "v")
                     ax.plot(d1.q_overlap, d1.raw_data2 * VOFFSET ** n, "^")
@@ -288,10 +297,15 @@ class Data1d:
             # plot the averaged data over each individual curve
             for i in range(n):
                 if i == 0:
-                    ax.plot(self.qgrid, self.data * VOFFSET ** i, color="gray", lw=2, ls="--", label="averaged")
+                    idx = (self.data > 0)  # Remove Zeros on plot
+                    handles, labels = ax.get_legend_handles_labels()
+                    lbl = "averaged" if "averaged" not in labels else ""
+                    ax.plot(self.qgrid[idx], self.data[idx] * VOFFSET ** i, color="gray", lw=2, ls="--", label=lbl)
                 else:
-                    ax.plot(self.qgrid, self.data * VOFFSET ** i, color="gray", lw=2, ls="--")
-            leg = ax.legend(loc='upper center', frameon=False)
+                    idx = (self.data > 0)  # Remove Zeros on plot
+                    ax.plot(self.qgrid[idx], self.data[idx] * VOFFSET ** i, color="gray", lw=2, ls="--")
+            leg = ax.legend(loc='upper right', frameon=False)
+
             for t in leg.get_texts():
                 t.set_fontsize('small')
 
@@ -303,16 +317,16 @@ class Data1d:
         if not (dbak.qgrid == self.qgrid).all():
             print("background subtraction failed: qgrid mismatch")
             exit()
-        if self.trans < 0 or dbak.trans < 0:
+        if self.trans < 0 or dbak.trans <= 0:
             print("WARNING: trans value not assigned to data or background, assuming normalized intnesity.")
             sc = 1.
         else:
             sc = self.trans / dbak.trans
 
-        # need to include raw data 
+        # need to include raw data
 
         if plot_data:
-            if ax == None:
+            if ax is None:
                 plt.figure()
                 plt.subplots_adjust(bottom=0.15)
                 ax = plt.gca()
@@ -323,13 +337,14 @@ class Data1d:
             idx = (self.data > 0) & (dbak.data > 0)
             ax.plot(self.qgrid[idx], self.data[idx], label=self.label)
             ax.plot(dbak.qgrid[idx], dbak.data[idx], label=dbak.label)
-            ax.plot(dbak.qgrid, dbak.data * sc * sc_factor, label=dbak.label + ", scaled")
+            ax.plot(dbak.qgrid[idx], dbak.data[idx] * sc * sc_factor, label=dbak.label + ", scaled")
             if hasattr(self, 'raw_data1') and hasattr(dbak, 'raw_data1'):
                 self.raw_data1 -= dbak.raw_data1 * sc_factor * sc
                 self.raw_data2 -= dbak.raw_data2 * sc_factor * sc
                 ax.plot(self.q_overlap, self.raw_data1, "v")
                 ax.plot(self.q_overlap, self.raw_data2, "^")
-            leg = ax.legend(loc='lower left', frameon=False)
+            leg = ax.legend(loc='upper right', frameon=False)
+
             for t in leg.get_texts():
                 t.set_fontsize('small')
 
@@ -390,7 +405,7 @@ class Data1d:
             # no overlap
             # simply stack WAXS data to the high q end of SAXS data
             qmin = qmax = max(self.qgrid[self.data > 0])
-        #            idx = np.asarray([],dtype=int)
+        # idx = np.asarray([],dtype=int)
 
         if len(self.qgrid[idx]) < 2:
             print("data sets are not overlapping in the given q range.")
@@ -404,7 +419,7 @@ class Data1d:
             # For a given experimental configuration, the intensity normlization
             # factor between the SAXS and WAXS should be well-defined. This factor
             # can be determined using scattering data with siginificant intensity
-            # in the overlapping q-range and applied to all data collected in the 
+            # in the overlapping q-range and applied to all data collected in the
             # same configuration.
             sc = fix_scale
         else:
@@ -423,7 +438,7 @@ class Data1d:
 
         if len(self.qgrid[idx]) > 0:
             self.data[idx] = (self.data[idx] + d1.data[idx]) / 2
-            # this won't work well if the merging data are mis-matched before bkg subtraction 
+            # this won't work well if the merging data are mis-matched before bkg subtraction
             # but match well after bkg subtraction
             # self.err[idx] = (self.err[idx]+d1.err[idx])/2+np.fabs(self.data[idx]-d1.data[idx])
             self.err[idx] = (self.err[idx] + d1.err[idx]) / 2
@@ -440,7 +455,7 @@ class Data1d:
         rg is the optinal initial estimate
         if fix_qe==1, qe defined the end of the region to perform the fit
         """
-        if ax == None:
+        if ax is None:
             ax = plt.gca()
         ax.set_xscale('linear')
         ax.set_yscale('log')
@@ -480,7 +495,7 @@ class Data1d:
         use the given i0 and rg value to fill in the low q part of the gap in data
         truncate the high q end at qmax
         """
-        if ax == None:
+        if ax is None:
             ax = plt.gca()
         ax.set_xscale('linear')
         ax.set_yscale('linear')
@@ -522,40 +537,94 @@ class Data1d:
         ff.write(self.comments)
         ff.close()
 
+    def plot(self, ax=None):
+        if ax is None:
+            plt.figure()
+            plt.subplots_adjust(bottom=0.15)
+            ax = plt.gca()
+        ax.set_xlabel("$q (\AA^{-1})$", fontsize='x-large')
+        ax.set_ylabel("$I$", fontsize='x-large')
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.errorbar(self.qgrid, self.data, self.err, label=self.label)
+        if hasattr(self, 'raw_data1'):
+            ax.plot(self.q_overlap, self.raw_data1, "v")
+            ax.plot(self.q_overlap, self.raw_data2, "^")
+        leg = ax.legend(loc='upper right', frameon=False)
 
-def avg_SWAXS(fns, sdark, sext="_SAXS", wdark=None, wext="_WAXS", qmax=-1, qmin=-1, reft=-1,
-              plot_data=False, save1d=False, saxsflat=None, waxsflat=None, fix_scale=-1, ax=None):
+        for t in leg.get_texts():
+            t.set_fontsize('small')
+
+
+def calculate(ds0, ds1):
+    diff_coef = np.sum(np.abs(np.subtract(ds0, ds1)))  # How different the datasets are
+    return diff_coef
+
+
+def normalize(ds):
+    return np.divide(ds.data, np.max(ds.data))
+
+
+def filter_by_similarity(datasets, similarity_threshold=0.5):
+    number_of_cpus = os.cpu_count()
+    number_of_datasets = len(datasets)
+    combinations = list(it.combinations(range(number_of_datasets), 2))
+    similarity_matrix = np.zeros((number_of_datasets, number_of_datasets), dtype=np.bool)
+    np.fill_diagonal(similarity_matrix, 1)  # If we compare the dataset with itself the result will always be one.
+
+    norm_data = collections.deque(map(normalize, datasets))
+    with mp.Pool(number_of_cpus) as pool:
+        similarities = pool.starmap(calculate, [(norm_data[i], norm_data[j]) for i, j in combinations])
+    similarities = np.divide(similarities, np.max(similarities)) <= similarity_threshold
+
+    idx = 0
+    for c in combinations:
+        similarity_matrix[c[0]][c[1]] = similarities[idx]
+        idx += 1
+    number_of_simil_per_column = np.sum(similarity_matrix, axis=0)
+    best_datasets_column = np.argmax(number_of_simil_per_column)
+    best_column = similarity_matrix[:, best_datasets_column]
+    valid_entries = list(it.compress(datasets, best_column))
+    invalid_entries = set(datasets)-set(valid_entries)
+    return valid_entries, invalid_entries
+
+def merge_detectors(fns, detectors, reft=-1, plot_data=False, save1d=False, ax=None, qmax=-1, qmin=-1, fix_scale=-1):
     """
-    fns: filenames, without the _SAXS/_WAXS surfix
-    sdark,wdark: dark current data for SAXS/WAXS, also contain qgrid, exp_para and mask 
+    fns: filename, without the _SAXS/_WAXS surfix
+    sdark,wdark: dark current data for SAXS/WAXS, also contain qgrid, exp_para and mask
     """
-
-    if not wdark == None:
-        if not sdark.qgrid.shape == wdark.qgrid.shape:
-            print("SAXS and WAXS data should have the same qgrid.")
-            exit()
-        if not (sdark.qgrid == wdark.qgrid).all():
-            print("SAXS and WAXS data should have the same qgrid.")
-            exit()
-
     ss = []
     for fn in fns:
-        s0 = Data1d()
-        s0.load_from_2D(fn + sext, sdark, dflat=saxsflat, dz=0)
-        # if not (saxsflat==None):
-        #    s0.flat_cor(saxsflat)
-        if save1d:
-            s0.save(fn + sext + ".ave")
-        if not wdark == None:
-            w0 = Data1d()
-            w0.load_from_2D(fn + wext, wdark, dflat=waxsflat, dz=1)
-            # if not (waxsflat==None):
-            #    w0.flat_cor(waxsflat)
+        s0 = None
+        for det in detectors:
+            aux = Data1d()
+            aux.load_from_2D(fn + det.extension, det.dark, dflat=det.flat, dz=det.dezinger)
             if save1d:
-                w0.save(fn + wext + ".ave")
-            s0.merge(w0, qmax, qmin, fix_scale)
+                aux.save(fn + det.extension + ".ave")
+            if s0 is None:
+                s0 = aux
+            else:
+                s0.merge(aux, qmax, qmin, fix_scale)
         s0.set_trans(ref_trans=reft)
         ss.append(s0)
+
+    return ss
+
+
+def average(fns, detectors, reft=-1, plot_data=False, save1d=False, ax=None, qmax=-1, qmin=-1, fix_scale=-1, filter_datasets=True, similarity_threshold=0.5):
+    """
+    fns: filename, without the _SAXS/_WAXS surfix
+    sdark,wdark: dark current data for SAXS/WAXS, also contain qgrid, exp_para and mask
+    """
+    ss = merge_detectors(fns, detectors, reft, plot_data, save1d, ax, qmax, qmin, fix_scale)
+
+    if filter_datasets:
+        ss, invalids = filter_by_similarity(ss, similarity_threshold=similarity_threshold)
+        # TODO: Insert warning/exception when the number of datasets discarded is high.
+        # TODO: Define the % of discarded to result in a error.
+        print("The following datasets where discarded due to similarity level below the threshold: ", similarity_threshold)
+        for inv in invalids:
+            print(inv.label)
 
     if len(ss) > 0:
         ss[0].avg(ss[1:], plot_data, ax=ax)
@@ -565,23 +634,27 @@ def avg_SWAXS(fns, sdark, sext="_SAXS", wdark=None, wext="_WAXS", qmax=-1, qmin=
     return ss[0]
 
 
-def proc_SWAXS(sfns, bfns, sdark, wdark=None, qmax=-1, qmin=-1, reft=-1, save1d=False, conc=0., plot_data=True,
-               saxsflat=None, waxsflat=None, fix_scale=-1):
-    # if qmax or qmin is not given, the WAXS data will be simply stacked to the end of the SAXS data
-    ds = avg_SWAXS(sfns, sdark, "_SAXS", wdark, "_WAXS", qmax, qmin, reft, plot_data=True, save1d=save1d,
-                   saxsflat=saxsflat, waxsflat=waxsflat, fix_scale=fix_scale)
-    db = avg_SWAXS(bfns, sdark, "_SAXS", wdark, "_WAXS", qmax, qmin, reft, plot_data=True, save1d=save1d,
-                   saxsflat=saxsflat, waxsflat=waxsflat, fix_scale=fix_scale)
+def process(sfns, bfns, detectors, qmax=-1, qmin=-1, reft=-1, save1d=False, conc=0., plot_data=True, fix_scale=-1, filter_datasets=True, similarity_threshold=0.5):
     vfrac = 0.001 * conc / PROTEIN_WATER_DENSITY_RATIO
-    ds.bkg_cor(db, 1.0 - vfrac, plot_data=True)
-    return ds
 
+    sample_axis = None
+    buffer_axis = None
+    bkg_cor_axis = None
 
-def proc_SAXS(sfns, bfns, sdark, reft=-1, save1d=False, conc=0., saxsflat=None):
-    ds = avg_SWAXS(sfns, sdark, reft=reft, plot_data=True, save1d=save1d, saxsflat=saxsflat)
-    db = avg_SWAXS(bfns, sdark, reft=reft, plot_data=True, save1d=save1d, saxsflat=saxsflat)
-    vfrac = 0.001 * conc / PROTEIN_WATER_DENSITY_RATIO
-    ds.bkg_cor(db, 1.0 - vfrac, plot_data=True)
+    if plot_data:
+        plt.figure()
+        sample_axis = plt.subplot2grid((2, 2), (0, 0), title="Sample Data")
+        buffer_axis = plt.subplot2grid((2, 2), (0, 1), title="Buffer Data")
+        bkg_cor_axis = plt.subplot2grid((2, 2), (1, 0), colspan=2, title="Background Correction")
+
+    # TODO: Run the next two lines in parallel
+    ds = average(sfns, detectors, reft=reft, plot_data=plot_data, save1d=save1d, ax=sample_axis, qmax=qmax,
+                 qmin=qmin, fix_scale=fix_scale, filter_datasets=filter_datasets, similarity_threshold=similarity_threshold)
+    db = average(bfns, detectors, reft=reft, plot_data=plot_data, save1d=save1d, ax=buffer_axis, qmax=qmax,
+                 qmin=qmin, fix_scale=fix_scale, filter_datasets=filter_datasets, similarity_threshold=similarity_threshold)
+
+    ds.bkg_cor(db, 1.0 - vfrac, plot_data=plot_data, ax=bkg_cor_axis)
+
     return ds
 
 
@@ -589,28 +662,12 @@ def analyze(d1, qstart, qend, fix_qe, qcutoff, dmax):
     plt.figure(figsize=(14, 5.5))
     plt.subplot(121)
     (I0, Rg) = d1.plot_Guinier(qs=qstart, qe=qend, fix_qe=fix_qe)
+
     print("I0=%f, Rg=%f" % (I0, Rg))
 
     plt.subplot(122)
     d1.plot_pr(I0, Rg, qmax=1.2, dmax=dmax)
-
     plt.subplots_adjust(bottom=0.15, wspace=0.25)
-
-
-def common_name(s1, s2):
-    l = len(s1)
-    if len(s2) < l:
-        l = len(s2)
-
-    s = ""
-    for i in range(l):
-        if s1[i] == s2[i]:
-            s += s1[i]
-        else:
-            break
-    if len(s) < 1:
-        s = s1.copy()
-    return s.rstrip("-_ ")
 
 
 def mod_qgrid(qgrid):
@@ -626,19 +683,19 @@ def mod_qgrid(qgrid):
     be a transition point
     """
     # mgrid = copy.copy(qgrid)
-    binw = np.ones(len(qgrid))
+    # binw = np.ones(len(qgrid))
     dq = qgrid[1] - qgrid[0]
-    bw = dq
+    # bw = dq
     for i in np.arange(len(qgrid) - 2) + 1:
         dq1 = qgrid[i + 1] - qgrid[i]
         if dq != dq1:  # modify qgrid[i]
             qgrid[i] += (dq + dq1) / 4 - dq / 2
             dq = dq1
 
-    for i in np.arange(len(qgrid) - 1):
-        bw = (qgrid[i + 1] - qgrid[i]) * 2 - bw
-        binw[i] = bw
-    binw[-1] = bw
+    # for i in np.arange(len(qgrid) - 1):
+    #     bw = (qgrid[i + 1] - qgrid[i]) * 2 - bw
+    #     binw[i] = bw
+    # binw[-1] = bw
 
-    # print qgrid,binw
+    # print(qgrid,binw)
     return qgrid
