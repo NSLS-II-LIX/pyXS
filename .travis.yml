@@ -15,7 +15,7 @@ before_install:
 install:
   - export GIT_FULL_HASH=`git rev-parse HEAD`
   - conda update conda --yes
-  - conda create -n testenv --yes nose python=$TRAVIS_PYTHON_VERSION numpy scipy matplotlib pillow swig
+  - conda create -n testenv --yes nose python=$TRAVIS_PYTHON_VERSION numpy scipy matplotlib swig opencv3
   - source activate testenv
   - pip install coveralls
   - python setup.py install

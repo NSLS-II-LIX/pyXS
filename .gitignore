@@ -62,6 +62,7 @@ target/
 *.ave
 *.dat
 *.pdf
+*.ddd
 
 .DS_Store
 .idea

@@ -574,19 +574,27 @@ def filter_by_similarity(datasets, similarity_threshold=0.5):
 
     norm_data = collections.deque(map(normalize, datasets))
     with mp.Pool(number_of_cpus) as pool:
-        similarities = pool.starmap(calculate, [(norm_data[i], norm_data[j]) for i, j in combinations])
-    similarities = np.divide(similarities, np.max(similarities)) <= similarity_threshold
+        differences = pool.starmap(calculate, [(norm_data[i], norm_data[j]) for i, j in combinations])
+
+    similarities = np.divide(differences, np.max(differences)) <= similarity_threshold
 
     idx = 0
     for c in combinations:
         similarity_matrix[c[0]][c[1]] = similarities[idx]
         idx += 1
     number_of_simil_per_column = np.sum(similarity_matrix, axis=0)
+
+    # No valid candidate, return all the data
+    if np.array_equal(number_of_simil_per_column, np.ones((number_of_datasets))):
+        print("No dataset with similarity level below threshold. Returning everything.")
+        return datasets, []
+
     best_datasets_column = np.argmax(number_of_simil_per_column)
     best_column = similarity_matrix[:, best_datasets_column]
     valid_entries = list(it.compress(datasets, best_column))
-    invalid_entries = set(datasets)-set(valid_entries)
+    invalid_entries = set(datasets) - set(valid_entries)
     return valid_entries, invalid_entries
+
 
 def merge_detectors(fns, detectors, reft=-1, plot_data=False, save1d=False, ax=None, qmax=-1, qmin=-1, fix_scale=-1):
     """
@@ -611,7 +619,8 @@ def merge_detectors(fns, detectors, reft=-1, plot_data=False, save1d=False, ax=N
     return ss
 
 
-def average(fns, detectors, reft=-1, plot_data=False, save1d=False, ax=None, qmax=-1, qmin=-1, fix_scale=-1, filter_datasets=True, similarity_threshold=0.5):
+def average(fns, detectors, reft=-1, plot_data=False, save1d=False, ax=None, qmax=-1, qmin=-1, fix_scale=-1,
+            filter_datasets=True, similarity_threshold=0.5):
     """
     fns: filename, without the _SAXS/_WAXS surfix
     sdark,wdark: dark current data for SAXS/WAXS, also contain qgrid, exp_para and mask
@@ -622,9 +631,11 @@ def average(fns, detectors, reft=-1, plot_data=False, save1d=False, ax=None, qma
         ss, invalids = filter_by_similarity(ss, similarity_threshold=similarity_threshold)
         # TODO: Insert warning/exception when the number of datasets discarded is high.
         # TODO: Define the % of discarded to result in a error.
-        print("The following datasets where discarded due to similarity level below the threshold: ", similarity_threshold)
-        for inv in invalids:
-            print(inv.label)
+        if len(invalids) > 0:
+            print("The following datasets where discarded due to similarity level below the threshold: ",
+                  similarity_threshold)
+            for inv in invalids:
+                print(inv.label)
 
     if len(ss) > 0:
         ss[0].avg(ss[1:], plot_data, ax=ax)
@@ -634,7 +645,8 @@ def average(fns, detectors, reft=-1, plot_data=False, save1d=False, ax=None, qma
     return ss[0]
 
 
-def process(sfns, bfns, detectors, qmax=-1, qmin=-1, reft=-1, save1d=False, conc=0., plot_data=True, fix_scale=-1, filter_datasets=True, similarity_threshold=0.5):
+def process(sfns, bfns, detectors, qmax=-1, qmin=-1, reft=-1, save1d=False, conc=0., plot_data=True, fix_scale=-1,
+            filter_datasets=True, similarity_threshold=0.5):
     vfrac = 0.001 * conc / PROTEIN_WATER_DENSITY_RATIO
 
     sample_axis = None
@@ -648,10 +660,21 @@ def process(sfns, bfns, detectors, qmax=-1, qmin=-1, reft=-1, save1d=False, conc
         bkg_cor_axis = plt.subplot2grid((2, 2), (1, 0), colspan=2, title="Background Correction")
 
     # TODO: Run the next two lines in parallel
-    ds = average(sfns, detectors, reft=reft, plot_data=plot_data, save1d=save1d, ax=sample_axis, qmax=qmax,
-                 qmin=qmin, fix_scale=fix_scale, filter_datasets=filter_datasets, similarity_threshold=similarity_threshold)
-    db = average(bfns, detectors, reft=reft, plot_data=plot_data, save1d=save1d, ax=buffer_axis, qmax=qmax,
-                 qmin=qmin, fix_scale=fix_scale, filter_datasets=filter_datasets, similarity_threshold=similarity_threshold)
+    args_sample = (sfns, detectors, reft, plot_data, save1d, sample_axis, qmax,
+                   qmin, fix_scale, filter_datasets, similarity_threshold)
+    args_buffer = (bfns, detectors, reft, plot_data, save1d, buffer_axis, qmax,
+                   qmin, fix_scale, filter_datasets, similarity_threshold)
+
+    # In order for the Pool to work we need to make the ExpPara something other than a SwigObject.
+    # Maybe it is time to change for something else
+    # with mp.Pool(1) as pool:
+    #     result = pool.starmap(average, (args_sample, args_buffer))
+    #
+    # ds = result[0]
+    # db = result[1]
+
+    ds = average(*args_sample)
+    db = average(*args_buffer)
 
     ds.bkg_cor(db, 1.0 - vfrac, plot_data=plot_data, ax=bkg_cor_axis)
 
