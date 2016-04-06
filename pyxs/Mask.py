@@ -61,18 +61,24 @@ class Mask:
             # r  x  y  w  h  rotation
             (x, y, w, h, rot) = para
 
-            x1 = int(x-(w/2))
-            x2 = int(x+(w/2))
-            y1 = int(y-(h/2))
-            y2 = int(y+(h/2))
-            points = np.asarray([[x1, y1], [x1, y2], [x2, y1], [x2, y2]])
-            rect = cv2.minAreaRect(points)
-            box = cv2.boxPoints(rect)
-            box = np.int0(box)
-            rows, cols = tmap.shape
-            M = cv2.getRotationMatrix2D((x, y), rot, 1)
-            cv2.drawContours(tmap, [box], 0, 1, -1)
-            tmap = cv2.warpAffine(tmap, M, (cols, rows))
+            margin = (np.asarray(mask_map.shape) / 2).astype(np.int)
+            tmap = np.zeros(mask_map.shape + 2*margin, dtype=np.uint8)
+            pt1 = (int(tmap.shape[1]/2 - w/2), int(tmap.shape[0]/2 - h/2))
+            pt2 = (int(tmap.shape[1]/2 + w/2), int(tmap.shape[0]/2 + h/2))
+            cv2.rectangle(tmap, pt1, pt2, color=1, thickness=-1)
+
+            import scipy.ndimage.interpolation as interp
+            tmap = interp.rotate(tmap, rot, reshape=False)
+
+            x_offset = int(x + margin[1] - tmap.shape[1] / 2 + 0.5)
+            y_offset = int(y + margin[0] - tmap.shape[0] / 2 + 0.5)
+
+            tmap = np.roll(tmap, x_offset, axis=1)
+            tmap = np.roll(tmap, y_offset, axis=0)
+
+            crop_params = (margin[0], margin[1], mask_map.shape[0] + margin[0], mask_map.shape[1] + margin[1])
+            tmap = tmap[crop_params[0]:crop_params[2], crop_params[1]:crop_params[3]]
+
         elif stype == 'f':
             pass
             # fan

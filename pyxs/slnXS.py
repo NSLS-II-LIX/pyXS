@@ -582,10 +582,11 @@ def filter_by_similarity(datasets, similarity_threshold=0.5):
     for c in combinations:
         similarity_matrix[c[0]][c[1]] = similarities[idx]
         idx += 1
+
     number_of_simil_per_column = np.sum(similarity_matrix, axis=0)
 
     # No valid candidate, return all the data
-    if np.array_equal(number_of_simil_per_column, np.ones((number_of_datasets))):
+    if np.array_equal(number_of_simil_per_column, np.ones(number_of_datasets)):
         print("No dataset with similarity level below threshold. Returning everything.")
         return datasets, []
 
@@ -631,6 +632,10 @@ def average(fns, detectors, reft=-1, plot_data=False, save1d=False, ax=None, qma
         ss, invalids = filter_by_similarity(ss, similarity_threshold=similarity_threshold)
         # TODO: Insert warning/exception when the number of datasets discarded is high.
         # TODO: Define the % of discarded to result in a error.
+        print("Selected Datasets: ")
+        for s in ss:
+            print(s.label)
+
         if len(invalids) > 0:
             print("The following datasets where discarded due to similarity level below the threshold: ",
                   similarity_threshold)

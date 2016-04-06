@@ -18,7 +18,7 @@ d1 = slnXS.process(["lysb_5mg-1.90s", "lysb_5mg-2.90s", "lysb_5mg-3.90s"],
                    plot_data=True,
                    fix_scale=51.9,
                    filter_datasets=True,
-                   similarity_threshold=0.4
+                   similarity_threshold=0.5
                 )
 
 t1 = time.time()
