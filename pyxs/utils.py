@@ -2,7 +2,17 @@ import numpy as np
 import matplotlib.colors as mc
 from functools import reduce
 
+def strip_name(s):
+    strs = ["_SAXS","_WAXS1","_WAXS2",".cbf",".tif"]
+    for ts in strs:
+        if ts in s:
+            ss = s.split(ts)
+            s = "".join(ss)
+    return s
+
 def common_name(s1, s2):
+    s1 = strip_name(s1)
+    s2 = strip_name(s2)
     l = len(s1)
     if len(s2) < l:
         l = len(s2)
