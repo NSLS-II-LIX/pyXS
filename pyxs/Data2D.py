@@ -3,8 +3,11 @@ import scipy.misc
 import numpy as np
 from scipy import interpolate
 import matplotlib.pyplot as plt
+from scipy import ndimage
+import datetime
 
 import fabio
+#import cv2
 
 """ this module handle data I/O and display
     the heavy-duty calculations are done by a C module, RQconv:
@@ -16,7 +19,16 @@ import fabio
     conv_to_Iq
     conv_to_Iqrqz
 """
-
+"""
+def rotate(data, rot):
+    (h, w) = data.shape[:2]
+    center = (w/2, h/2)
+    M = cv2.getRotationMatrix2D(center, rot, 1.0)
+    r_data = cv2.warpAffine(data, M, (w, h))
+    return r_data
+"""
+def rotate(data, rot):
+    ndimage.rotate(data, rot, reshape=False)
 
 class Data2d:
     """ 2D scattering data class
@@ -27,19 +39,29 @@ class Data2d:
     """
     data = np.array([])
 
-    def __init__(self, filename, flip=0):
+    def __init__(self, filename, im=None, flip=0):
         """ read 2D scattering pattern
-        will rely on PIL to recognize the file format 
-        flip=1 for PSI WAXS data 
+        will rely on Fabio to recognize the file format 
         """
         # most detector images have mode "I;16"
         # have to be converted to mode "I" for transpose and conversion to array to work
         # conversion to mode "I" apparent also works for tiff32 (PILATUS)
         # NOTE: the index of the 2d array is data[row,col]
         self.exp = None
-        self.im = fabio.open(filename).data
+        if im==None:
+            f = fabio.open(filename)
+            self.im = f.data
+            # get other useful information from the header
+            if f.header['_array_data.header_convention']=='PILATUS_1.2':
+                ts = f.header['_array_data.header_contents'].split("\n")[1]
+                self.timestamp = datetime.datetime.strptime(ts, "# %Y-%m-%dT%H:%M:%S.%f\r")
+            else:
+                self.timestamp = None
+        else:
+            self.im = im
+            self.timestamp = None
         if flip:
-            self.im = np.fliplr(np.rot90(self.im))
+            self.flip(flip)
         # convert into an array
         # copy() seems to be necessary for later alteration of the 2D data
         self.data = np.asarray(self.im).copy()
@@ -48,9 +70,26 @@ class Data2d:
         self.qdata = None
         # self.exp = RQconv.ExpPara()
 
+    def set_timestamp(self, ts):
+        # ts must be a valid datetime structure
+        self.timestamp = ts
+
+    def flip(self, flip):
+        """ this is a little complicated
+            if flip<0, do a mirror operation first
+            the absolute value of flip is the number of 90-deg rotations
+        """  
+        if flip == 0:
+            return
+        if flip<0:
+            self.im = np.fliplr(self.im)
+            flip = -flip
+        for _ in range(flip):
+            self.im = np.rot90(self.im)
+
     def set_exp_para(self, exp):
         if exp.flip:
-            self.im = np.fliplr(np.rot90(self.im))
+            self.flip(exp.flip)
             self.data = np.asarray(self.im).copy()
             (self.height, self.width) = np.shape(self.data)
         self.exp = exp
@@ -156,45 +195,67 @@ class Data2d:
         ii = interpolate.griddata(points, values, (box_x, box_y), method='cubic').sum()
         return ii
 
-    def roi_cnt(self, cx, cy, w, h, phi, show=False):
+    def roi_cnt(self, cx, cy, w, h, phi, show=False, mask=None):
         """ return the total counts in the ROI
         cx,cy is the center and w,h specify the size (2w-1)x(2h-1)
         phi is the orientation of the width of the box from x-axis, CCW
         useful calculating for line profile on a curve
         NOTE: PIL image rotate about the center of the image
         NOTE: potential problem: crop wraps around the image if cropping near the edge
+
+        scipy.misc.imrotate() is supposed to be calling just PIL
+
+        scipy.ndimage.rotate() is supposed to work better
+
+        scipy.ndimage.rotate() was taking too long compared to cv2 rotate.
+
         """
         # get a larger box
         t = int(np.sqrt(w * w + h * h) + 1)
-        #imroi = self.im.crop((np.int(cx - t + 1), np.int(cy - t + 1), np.int(cx + t), np.int(cy + t)))
+        imroi = self.data[np.int(cy - t + 1):np.int(cy + t), np.int(cx - t + 1): np.int(cx + t)]
 
-        imroi = self.im[np.int(cx - t + 1):np.int(cy - t + 1), np.int(cx + t):np.int(cy + t)]
-        # rotate 
-        imroi = scipy.misc.imrotate(imroi, -phi, 'bilinear')
+        if mask:
+            mask_data = mask.map[np.int(cy - t + 1):np.int(cy + t), np.int(cx - t + 1): np.int(cx + t)]
+            mask_data = 1.0 - np.asarray(mask_data, dtype=imroi.dtype)
+            imroi = imroi*mask_data
+
+        # rotate - phi must be in degrees
+        imroi = rotate(imroi, -phi)
+        #imroi = ndimage.rotate(imroi, -phi, reshape=False)
         # get the roi
-        #imroi = imroi.crop((np.int(t - w + 1), np.int(t - h + 1), np.int(t + w), np.int(t + h)))
-        imroi = imroi[np.int(t - w + 1):np.int(t - h + 1), np.int(t + w):np.int(t + h)]
+        imroi = imroi[np.int(t - h + 1):np.int(t + h), np.int(t - w + 1):np.int(t + w)]
+        imroi_sum = imroi.sum()
 
+        if mask:
+            mask_data = rotate(mask_data, -phi)
+            #mask_data = ndimage.rotate(mask_data, -phi, reshape=False)
+            mask_data = mask_data[np.int(t - h + 1):np.int(t + h), np.int(t - w + 1):np.int(t + w)]
+            # for some reason the value of mask_data SOMETIMES turns from 1,0 to 255 after imrotate()
+            # ndimage seems to work better
+            num_points = mask_data.sum()
+        else:
+            num_points = imroi.size
 
         if show:
-            plt.figure()
+            #plt.figure()
             ax = plt.gca()
             ax.imshow(imroi, interpolation='nearest')
-        return imroi.sum()
 
-    def profile_xyphi(self, xy_grid, w, h, bkg=0):
+        return (imroi_sum, num_points)
+
+    def profile_xyphi(self, xy_grid, w, h, bkg=0, mask=None):
         """ the shape of xy_grid should be (3,N)
         if bkg=1: subtract the counts in the box next to the width as bkg
         if bkg=-1: subtract the counts in the box next to the height as bkg        """
 
         ixy = []
         for [x, y, phi] in xy_grid:
-            ii = self.roi_cnt(x, y, w, h, phi)
+            ii = self.roi_cnt(x, y, w, h, phi, mask=mask)[0]
             if bkg == 1:
-                iib = (self.roi_cnt(x, y, w * 2, h, phi) - ii) / (w * 2) * (w * 2 - 1)
+                iib = (self.roi_cnt(x, y, w * 2, h, phi)[0] - ii) / (w * 2) * (w * 2 - 1)
                 ii -= iib
             elif bkg == -1:
-                iib = (self.roi_cnt(x, y, w, h * 2, phi) - ii) / (h * 2) * (h * 2 - 1)
+                iib = (self.roi_cnt(x, y, w, h * 2, phi)[0] - ii) / (h * 2) * (h * 2 - 1)
                 ii -= iib
             ixy.append(ii)
         # print ixy
@@ -289,7 +350,7 @@ class Data2d:
         RQconv.cor_IAdep_2D(dm, self.exp, corCode, invert)
         self.data = dm
 
-    def conv_to_Iq(self, qidi, mask, dz=True, w=3, tol=3, cor=0):
+    def conv_to_Iq(self, qidi, mask, dz=False, w=3, tol=3, cor=0, debug=False):
         """ convert solution scattering/powder diffraction data into 1D scattering curve
         the q axis is given by grid (1d array)
         calls the C-code in RQconv
@@ -304,7 +365,8 @@ class Data2d:
         dm = np.zeros((self.height, self.width), np.int32) + 1
         # dm = 1-np.asarray(mask.map,np.int32)
         if dz:
-            print("dezinger ...")
+            if debug!='quiet':
+                print("dezinger ...")
             RQconv.dezinger(self.data.astype(np.int32), dm, w, tol)
         # NOTE: use self.data+1, instead of self.data, to avoid confusion betwee
         # zero-count pixels and masked pixels. The added 1 count will be subtracted in RQconv
@@ -334,7 +396,7 @@ class Data2d:
         self.data = np.subtract(self.data, darray)
 
     def add(self, darray):
-        """ self = self + dset  
+        """ self = self + dset
         """
         if not (self.data.shape == darray.shape):
             print("cannot add 2D data of different shapes:", self.shape, darray.shape)
