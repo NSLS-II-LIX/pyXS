@@ -1,4 +1,4 @@
-import cv2
+from PIL import Image, ImageDraw, ImageChops
 import numpy as np
 
 
@@ -18,7 +18,7 @@ class Mask:
 
     def read_file(self, filename):
         self.maskfile = filename
-        mask_map = np.zeros((self.height, self.width), dtype=np.bool)
+        mask_map = Image.new('1', (self.width, self.height))
         for line in open(filename):
             fields = line.strip().split()
             if len(fields) < 2:
@@ -27,7 +27,8 @@ class Mask:
             if stype in ['h', 'c', 'r', 'f', 'p']:
                 para = [float(t) for t in fields[1:]]
                 mask_map = self.add_item(mask_map, stype, para)
-        self.map = mask_map.astype(np.bool)
+        self.map = np.asarray(mask_map.convert("I"), dtype=np.bool)
+        del mask_map
 
     def invert(self):
         """ invert the mask
@@ -35,65 +36,48 @@ class Mask:
         self.map = 1 - self.map
 
     @staticmethod
-    def pairwise(iterable):
-        "s -> (s0,s1), (s2,s3), (s4, s5), ..."
-        a = iter(iterable)
-        return zip(a, a)
-
-    @staticmethod
     def add_item(mask_map, stype, para):
-        print("Add Item: ", stype, para)
-        tmap = np.zeros(mask_map.shape, dtype=np.uint8)
-
+        tmap = Image.new('1', mask_map.size)
+        draw = ImageDraw.Draw(tmap)
         if stype == 'c':
             # filled circle
             # c  x  y  r
             (x, y, r) = para
-            cv2.circle(tmap, (int(x), int(y)), int(r), color=1, thickness=-1)
+            draw.ellipse((x - r, y - r, x + r, y + r), fill=1)
         elif stype == 'h':
             # inverse of filled circle
             # h  x  y  r
             (x, y, r) = para
-            cv2.rectangle(tmap, (0, 0), tmap.shape, 1, -1)
-            cv2.circle(tmap, (int(x), int(y)), int(r), color=0, thickness=-1)
+            draw.rectangle(((0, 0), tmap.size), fill=1)
+            draw.ellipse((x - r, y - r, x + r, y + r), fill=0)
         elif stype == 'r':
             # rectangle
             # r  x  y  w  h  rotation
+            margin = (np.asarray(mask_map.size) / 2).astype(np.int)
+            tmap = tmap.resize(np.asarray(mask_map.size) + 2 * margin)
+            draw = ImageDraw.Draw(tmap)
             (x, y, w, h, rot) = para
-
-            margin = (np.asarray(mask_map.shape) / 2).astype(np.int)
-            tmap = np.zeros(mask_map.shape + 2*margin, dtype=np.uint8)
-            pt1 = (int(tmap.shape[1]/2 - w/2), int(tmap.shape[0]/2 - h/2))
-            pt2 = (int(tmap.shape[1]/2 + w/2), int(tmap.shape[0]/2 + h/2))
-            cv2.rectangle(tmap, pt1, pt2, color=1, thickness=-1)
-
-            import scipy.ndimage.interpolation as interp
-            tmap = interp.rotate(tmap, rot, reshape=False)
-
-            x_offset = int(x + margin[1] - tmap.shape[1] / 2 + 0.5)
-            y_offset = int(y + margin[0] - tmap.shape[0] / 2 + 0.5)
-
-            tmap = np.roll(tmap, x_offset, axis=1)
-            tmap = np.roll(tmap, y_offset, axis=0)
-
-            crop_params = (margin[0], margin[1], mask_map.shape[0] + margin[0], mask_map.shape[1] + margin[1])
-            tmap = tmap[crop_params[0]:crop_params[2], crop_params[1]:crop_params[3]]
-
+            draw.rectangle(
+                (tmap.size[0] / 2 - w / 2, tmap.size[1] / 2 - h / 2,
+                 tmap.size[0] / 2 + w / 2, tmap.size[1] / 2 + h / 2),
+                fill=1)
+            tmap = tmap.rotate(rot)
+            tmap = ImageChops.offset(tmap, int(x + margin[0] - tmap.size[0] / 2 + 0.5),
+                                     int(y + margin[1] - tmap.size[1] / 2 + 0.5))
+            tmap = tmap.crop((margin[0], margin[1], mask_map.size[0] + margin[0], mask_map.size[1] + margin[1]))
         elif stype == 'f':
-            pass
             # fan
             # f  x  y  start  end  r1  r2  (r1<r2)
             (x, y, a_st, a_nd, r1, r2) = para
-            cv2.ellipse(tmap, (x, y), (r1, r2), a_st, a_nd, 1, -1)
+            draw.pieslice((x - r2, y - r2, x + r2, y + r2), a_st, a_nd, fill=1)
+            draw.pieslice((x - r1, y - r1, x + r1, y + r1), a_st, a_nd, fill=0)
         elif stype == 'p':
             # polygon
             # p  x1  y1  x2  y1  x3  y3  ...
-            points = np.array([[x,y] for x,y in Mask.pairwise(para)], dtype=np.int32)
-            points = points.reshape((-1, 1, 2))
-            cv2.fillConvexPoly(tmap, points, color=1)
+            draw.polygon(para, fill=1)
 
-        mask_map = np.logical_or(mask_map, tmap)
-        del tmap
+        mask_map = ImageChops.lighter(mask_map, tmap)
+        del draw
         return mask_map
 
     def clear(self):
@@ -101,3 +85,4 @@ class Mask:
 
     def val(self, x, y):
         return self.map[y][x]
+
